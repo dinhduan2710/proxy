@@ -1,0 +1,64 @@
+version: '3'
+
+services:
+  reverse-proxy:
+    # The official v2 Traefik docker image
+    image: traefik:v2.7
+    restart: always
+    labels:
+      - traefik.http.routers.traefik.rule=Host(`proxy.monitor.docker`)
+      - traefik.http.services.traefik.loadbalancer.server.port=8080
+      - traefik.docker.network=reverse-proxy
+    # Enables the web UI and tells Traefik to listen to docker
+    command: 
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true --providers.docker"
+      - "--api.insecure=true"
+      - "--docker"
+      - "--api"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443" # new
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true" # new
+      - "--certificatesresolvers.myresolver.acme.email=your@email.com" # new
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json" # new
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+      # The DB host
+      - "443:443"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - ./certs:/certs
+      - ./traefik.toml:/etc/traefik/conf/acme.toml:ro
+      - ./acme.json:/etc/traefik/conf/acme.json:rw
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - reverse-proxy
+
+
+  whoami:
+    image: "traefik/whoami"
+    container_name: "simple-service"
+    scale: 5
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`whoami.localhost`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+
+  whoami2:
+    image: "nginxdemos/hello"
+    container_name: "simple-service2"
+    scale: 1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami2.rule=Host(`whoami2.localhost`)"
+      - "traefik.http.routers.whoami2.entrypoints=web"
+
+networks:
+  proxy:
+    external:
+      name: reverse-proxy
